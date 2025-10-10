@@ -119,13 +119,20 @@
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
 
+
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: linear-gradient(135deg, #e0e7ff 0%, #b4aeea 100%);
+            color: #4b3ca7;
+            font-weight: 600;
+            border: 2px solid #b4aeea;
+            box-shadow: 0 2px 8px rgba(180, 174, 234, 0.2);
+            transition: background 0.3s, box-shadow 0.3s;
         }
 
         .btn-secondary:hover {
-            background: #e0e0e0;
+            background: linear-gradient(135deg, #b4aeea 0%, #667eea 100%);
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
         }
 
         button:disabled {
@@ -324,6 +331,7 @@
                     placeholder="何について議論してほしいですか？自由に入力してください"
                 ></textarea>
                 <p class="hint">💡 ビジネス、製品開発、戦略、課題解決など、どんなテーマでもOKです</p>
+                    <button id="refineBtn" class="btn-secondary" style="margin-top:10px;">✨ テーマを具体化する</button>
             </div>
 
             <div class="input-section">
@@ -332,10 +340,9 @@
                 <p class="hint">各ペルソナが発言する回数。多いほど深い議論になります</p>
             </div>
 
-            <div class="button-group">
-                <button id="refineBtn" class="btn-secondary">✨ テーマを具体化する</button>
-                <button id="generateBtn" class="btn-primary">🚀 会議を開始</button>
-            </div>
+                <div class="button-group">
+                    <button id="generateBtn" class="btn-primary">🚀 会議を開始</button>
+                </div>
 
             <div id="loading" class="loading">
                 <div class="spinner"></div>
