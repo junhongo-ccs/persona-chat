@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マルチペルソナ会議シミュレーター</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .input-section {
+            margin-bottom: 25px;
+        }
+
+        .input-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 1.05em;
+        }
+
+        .input-section textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 80px;
+            transition: border-color 0.3s;
+        }
+
+        .input-section textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-section input[type="number"] {
+            width: 100px;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .hint {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .conversation {
+            display: none;
+        }
+
+        .conversation.active {
+            display: block;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f9f9f9;
+            border-left: 4px solid #667eea;
+        }
+
+        .message.facilitator {
+            background: #e8eaf6;
+            border-left-color: #3f51b5;
+        }
+
+        .message.optimist {
+            background: #e8f5e9;
+            border-left-color: #4caf50;
+        }
+
+        .message.realist {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+
+        .message.customer {
+            background: #fce4ec;
+            border-left-color: #e91e63;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .persona-name {
+            font-weight: 600;
+            font-size: 1.05em;
+            color: #333;
+        }
+
+        .timestamp {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .message-content {
+            line-height: 1.6;
+            color: #444;
+        }
+
+        .summary-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .summary-box h3 {
+            margin-bottom: 10px;
+        }
+
+        .personas-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .persona-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .persona-card h4 {
+            margin-bottom: 5px;
+            font-size: 1em;
+        }
+
+        .persona-card p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .refined-theme {
+            background: #fff9c4;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #fbc02d;
+        }
+
+        .refined-theme strong {
+            display: block;
+            margin-bottom: 5px;
+            color: #f57f17;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.5em;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .btn-primary {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎭 マルチペルソナ会議シミュレーター</h1>
+            <p>異なる視点を持つAIペルソナが、あなたのテーマについて議論します</p>
+        </div>
+
+        <div class="card">
+            <div class="personas-info">
+                <div class="persona-card">
+                    <h4>🎯 ファシリテーター</h4>
+                    <p>議論を整理し進行を管理</p>
+                </div>
+                <div class="persona-card">
+                    <h4>📈 楽観的マーケター</h4>
+                    <p>機会と可能性を探る</p>
+                </div>
+                <div class="persona-card">
+                    <h4>⚙️ 慎重なエンジニア</h4>
+                    <p>リスクと実現性を分析</p>
+                </div>
+                <div class="persona-card">
+                    <h4>👤 ユーザー代表</h4>
+                    <p>使い手の視点で評価</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="input-section">
+                <label for="theme">議論したいテーマ</label>
+                <textarea 
+                    id="theme" 
+                    placeholder="何について議論してほしいですか？自由に入力してください"
+                ></textarea>
+                <p class="hint">💡 ビジネス、製品開発、戦略、課題解決など、どんなテーマでもOKです</p>
+            </div>
+
+            <div class="input-section">
+                <label for="turns">議論のターン数（1-5）</label>
+                <input type="number" id="turns" value="3" min="1" max="5">
+                <p class="hint">各ペルソナが発言する回数。多いほど深い議論になります</p>
+            </div>
+
+            <div class="button-group">
+                <button id="refineBtn" class="btn-secondary">✨ テーマを具体化する</button>
+                <button id="generateBtn" class="btn-primary">🚀 会議を開始</button>
+            </div>
+
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>AIペルソナが議論中...</p>
+            </div>
+        </div>
+
+        <div id="conversation" class="conversation">
+            <div class="card">
+                <div id="refinedThemeBox"></div>
+                <h2 style="margin-bottom: 20px;">💬 議論の内容</h2>
+                <div id="messages"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const themeInput = document.getElementById('theme');
+        const turnsInput = document.getElementById('turns');
+        const refineBtn = document.getElementById('refineBtn');
+        const generateBtn = document.getElementById('generateBtn');
+        const loading = document.getElementById('loading');
+        const conversation = document.getElementById('conversation');
+        const messages = document.getElementById('messages');
+        const refinedThemeBox = document.getElementById('refinedThemeBox');
+
+        let currentRefinedTheme = null;
+
+        // テーマを具体化
+        refineBtn.addEventListener('click', async () => {
+            const theme = themeInput.value.trim();
+            
+            if (!theme || theme.length < 3) {
+                alert('テーマを入力してください');
+                return;
+            }
+
+            refineBtn.disabled = true;
+            refineBtn.textContent = '処理中...';
+
+            try {
+                const response = await fetch('/api/refine-theme', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ theme })
+                });
+
+                if (!response.ok) {
+                    throw new Error('テーマの具体化に失敗しました');
+                }
+
+                const data = await response.json();
+                currentRefinedTheme = data.refinedTheme;
+                
+                // 具体化されたテーマを表示
+                themeInput.value = currentRefinedTheme;
+                
+                alert('テーマを具体化しました！\n\n気に入らなければ手動で編集できます。');
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('エラーが発生しました: ' + error.message);
+            } finally {
+                refineBtn.disabled = false;
+                refineBtn.textContent = '✨ テーマを具体化する';
+            }
+        });
+
+        // 会話を生成
+        generateBtn.addEventListener('click', async () => {
+            const theme = themeInput.value.trim();
+            const turns = parseInt(turnsInput.value);
+
+            if (!theme || theme.length < 3) {
+                alert('テーマを入力してください');
+                return;
+            }
+
+            if (turns < 1 || turns > 5) {
+                alert('ターン数は1-5の範囲で指定してください');
+                return;
+            }
+
+            // UI更新
+            generateBtn.disabled = true;
+            refineBtn.disabled = true;
+            loading.classList.add('active');
+            conversation.classList.remove('active');
+            messages.innerHTML = '';
+            refinedThemeBox.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/generate-conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ theme, turns })
+                });
+
+                if (!response.ok) {
+                    throw new Error('会話の生成に失敗しました');
+                }
+
+                const data = await response.json();
+
+                // 会話を表示
+                data.conversation.forEach((msg, index) => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${msg.persona}`;
+                    
+                    const time = new Date(msg.timestamp).toLocaleTimeString('ja-JP', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    messageDiv.innerHTML = `
+                        <div class="message-header">
+                            <span class="persona-name">${msg.name}</span>
+                            <span class="timestamp">${time}</span>
+                        </div>
+                        <div class="message-content">${msg.message}</div>
+                    `;
+
+                    messages.appendChild(messageDiv);
+                });
+
+                conversation.classList.add('active');
+                conversation.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('エラーが発生しました: ' + error.message);
+            } finally {
+                generateBtn.disabled = false;
+                refineBtn.disabled = false;
+                loading.classList.remove('active');
+            }
+        });
+
+        // Enterキーでの送信を防止（Shift+Enterで改行）
+        themeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                generateBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
