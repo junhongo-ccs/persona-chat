@@ -32,7 +32,7 @@ AIペルソナが異なる視点からビジネステーマについて議論す
 1. リポジトリをクローン
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/junhongo-ccs/persona-chat
 cd persona-chat
 ```
 
