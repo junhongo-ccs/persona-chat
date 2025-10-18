@@ -17,7 +17,7 @@ AIペルソナが異なる視点からビジネステーマについて議論す
 ## 技術スタック
 
 - **バックエンド**: Node.js + Express
-- **API**: Claude API (Anthropic)
+- **API**: Google Gemini / Vertex AI Generative Models
 - **フロントエンド**: バニラHTML/CSS/JavaScript
 
 ## セットアップ
@@ -25,7 +25,7 @@ AIペルソナが異なる視点からビジネステーマについて議論す
 ### 前提条件
 
 - Node.js 18以上
-- Anthropic API キー ([こちらから取得](https://console.anthropic.com/))
+- Google Cloud の API キー（Vertex AI Generative Models のアクセス用）またはサービスアカウント
 
 ### ローカル開発
 
@@ -48,10 +48,11 @@ npm install
 cp .env.example .env
 ```
 
-`.env`ファイルを編集して、Anthropic API キーを設定：
+`.env`ファイルを編集して、Google の API キー（もしくはサービスアカウント経由の設定）を設定：
 
 ```
-ANTHROPIC_API_KEY=your_actual_api_key_here
+GOOGLE_API_KEY=your_google_api_key_here
+GEMINI_MODEL=gemini-1.5-flash # 任意: 使用するモデル名
 PORT=3000
 ```
 
@@ -87,7 +88,8 @@ git push -u origin main
 3. 「Deploy from GitHub repo」を選択
 4. リポジトリを選択
 5. 環境変数を設定：
-   - `ANTHROPIC_API_KEY`: あなたのAnthropic APIキー
+   - `GOOGLE_API_KEY`: Google Cloud の API キー（Vertex AI へのアクセス）
+   - `GEMINI_MODEL` (任意): 使用するモデル名（例: `gemini-1.5-flash`）
 6. 「Deploy」をクリック
 
 Railway が自動的に：
@@ -119,11 +121,11 @@ Railway が自動的に：
 
 ## API レート制限について
 
-Claude APIの利用には制限があります：
-- 無料tier: 月間一定のトークン数まで
-- 詳細は [Anthropic の料金ページ](https://www.anthropic.com/pricing) を確認してください
+Gemini API の利用には制限と課金が適用されます：
+- 無料枠や上限は変更される可能性があります
+- 最新情報は Google Cloud の料金ページとクォータ情報を参照してください
 
-複数ユーザーでの利用を想定する場合は、適切なプランを選択してください。
+複数ユーザーでの利用を想定する場合は、適切なクォータと予算を設定してください。
 
 ## カスタマイズ
 

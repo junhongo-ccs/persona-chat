@@ -34,39 +34,68 @@ const PERSONAS = {
   }
 };
 
-// Claude APIを呼び出す関数（Anthropic形式）
-async function callClaudeAPI(messages, systemPrompt) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  
+// Gemini (Generative Language API) に置き換えた API 呼び出し関数
+// 環境変数 `GOOGLE_API_KEY` に設定した API キーを使用し、
+// Generative Language API (v1) の generateContent を呼び出します。
+// 参考: https://ai.google.dev/gemini-api/docs/get-started?hl=ja
+async function callGeminiAPI(messages, systemPrompt) {
+  const apiKey = process.env.GOOGLE_API_KEY;
+
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is not set in environment variables');
+    throw new Error('GOOGLE_API_KEY is not set in environment variables');
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // ユーザー入力部分をまとめる（本アプリでは常に user からの単一メッセージ想定）
+    const userText = messages.map(m => m.content).join('\n\n');
+
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
+  const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: messages
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: userText }]
+          }
+        ],
+        system_instruction: systemPrompt
+          ? { role: 'system', parts: [{ text: systemPrompt }] }
+          : undefined,
+        generationConfig: {
+          temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0.2'),
+          maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || '512')
+        }
       })
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`API Error: ${response.status} - ${JSON.stringify(errorData)}`);
+      const errorData = await response.text().catch(() => '');
+      throw new Error(`Gemini API Error: ${response.status} - ${errorData}`);
     }
 
     const data = await response.json();
-    return data.content[0].text;
+    // レスポンスからテキストを抽出
+    const candidate = data.candidates && data.candidates[0];
+    const parts = candidate && candidate.content && candidate.content.parts;
+    if (Array.isArray(parts)) {
+      return parts
+        .map(p => (typeof p.text === 'string' ? p.text : ''))
+        .join('\n')
+        .trim();
+    }
+    // フォールバック
+    if (candidate && typeof candidate.output_text === 'string') {
+      return candidate.output_text;
+    }
+    return JSON.stringify(data);
   } catch (error) {
-    console.error('Claude API Error:', error);
+    console.error('Gemini API Error:', error);
     throw error;
   }
 }
@@ -91,7 +120,7 @@ app.post('/api/refine-theme', async (req, res) => {
 
     const systemPrompt = "あなたはビジネステーマを具体化する専門家です。曖昧なテーマを議論しやすい明確な形に整えます。";
     
-    const refinedTheme = await callClaudeAPI(messages, systemPrompt);
+  const refinedTheme = await callGeminiAPI(messages, systemPrompt);
 
     res.json({ refinedTheme: refinedTheme.trim() });
   } catch (error) {
@@ -119,7 +148,7 @@ app.post('/api/generate-conversation', async (req, res) => {
       content: `これから「${theme}」というテーマについて議論を始めます。ファシリテーターとして、簡潔に議論をスタートさせてください。参加者は楽観的マーケター、慎重なエンジニア、ユーザー代表の3名です。`
     };
 
-    const facilitatorOpening = await callClaudeAPI(
+    const facilitatorOpening = await callGeminiAPI(
       [openingMessage],
       PERSONAS.facilitator.systemPrompt
     );
@@ -158,7 +187,7 @@ ${historyText}
 あなた（${persona.name}）の番です。上記の議論を踏まえて、あなたの視点から意見を述べてください。`
         }];
 
-        const response = await callClaudeAPI(messages, persona.systemPrompt);
+  const response = await callGeminiAPI(messages, persona.systemPrompt);
 
         conversation.push({
           persona: personaKey,
@@ -184,7 +213,7 @@ ${historyText}
 ファシリテーターとして、ここまでの議論を簡潔にまとめ、次のターンに向けて論点を提示してください。`
         }];
 
-        const facilitatorSummary = await callClaudeAPI(
+        const facilitatorSummary = await callGeminiAPI(
           messages,
           PERSONAS.facilitator.systemPrompt
         );
@@ -213,7 +242,7 @@ ${historyText}
 ファシリテーターとして、議論全体を総括してください。主要な論点、合意事項、今後の検討課題を簡潔にまとめてください。`
     }];
 
-    const finalSummary = await callClaudeAPI(
+    const finalSummary = await callGeminiAPI(
       messages,
       PERSONAS.facilitator.systemPrompt
     );
