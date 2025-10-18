@@ -7,7 +7,7 @@
 1. ターミナルで以下のコマンドを実行：
 
 ```bash
-cd /home/claude/persona-chat
+cd /home/app/persona-chat
 
 # Gitリポジトリを初期化
 git init
@@ -44,10 +44,11 @@ Railway のプロジェクト画面で：
 2. 以下の環境変数を追加：
 
 ```
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
+GOOGLE_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxx
+GEMINI_MODEL=gemini-1.5-flash
 ```
 
-（Anthropic API キーは https://console.anthropic.com/ から取得）
+（Google Cloud Console で API キーを作成。Gemini API を有効化する必要があります）
 
 ### ステップ4: デプロイを確認
 
@@ -60,12 +61,12 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
 ### デプロイが失敗する場合
 
 1. ログを確認：Railway の「Deployments」タブでログを確認
-2. 環境変数を確認：`ANTHROPIC_API_KEY` が正しく設定されているか確認
+2. 環境変数を確認：`GOOGLE_API_KEY` が正しく設定されているか確認
 3. package.json を確認：依存関係が正しいか確認
 
 ### アプリが起動しない場合
 
-- Railway のログで「ANTHROPIC_API_KEY is not set」エラーが出ている場合
+- Railway のログで「GOOGLE_API_KEY is not set」エラーが出ている場合
   → 環境変数を設定してください
 
 - ポートエラーが出る場合
@@ -92,6 +93,6 @@ npm start
 ## 費用について
 
 - **Railway**: 無料枠あり（月500時間まで）、超過後は従量課金
-- **Anthropic API**: 使用量に応じた課金（トークン数ベース）
+- **Gemini API (Google)**: 使用量に応じた課金（トークン/リクエストベース）
 
 複数ユーザーでの使用を想定する場合は、両方の料金体系を確認してください。
