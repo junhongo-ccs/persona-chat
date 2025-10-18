@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// ペルソナ定義
+// キャラクター定義
 const PERSONAS = {
   facilitator: {
     name: "ファシリテーター（進行役）",

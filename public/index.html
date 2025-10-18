@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>マルチペルソナ会議シミュレーター</title>
+    <title>マルチキャラクター会議シミュレーター</title>
     <style>
         * {
             margin: 0;
@@ -298,8 +298,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎭 マルチペルソナ会議シミュレーター</h1>
-            <p>異なる視点を持つAIペルソナが、あなたのテーマについて議論します</p>
+            <h1>🎭 マルチキャラクター会議シミュレーター</h1>
+            <p>異なる視点を持つAIキャラクターが、あなたのテーマについて議論します</p>
         </div>
 
         <div class="card">
@@ -331,22 +331,22 @@
                     placeholder="何について議論してほしいですか？自由に入力してください"
                 ></textarea>
                 <p class="hint">💡 ビジネス、製品開発、戦略、課題解決など、どんなテーマでもOKです</p>
-                    <button id="refineBtn" class="btn-secondary" style="margin-top:10px;">✨ テーマを具体化する</button>
+                    <button id="refineBtn" type="button" class="btn-secondary" style="margin-top:10px;">✨ テーマを具体化する</button>
             </div>
 
             <div class="input-section">
                 <label for="turns">議論のターン数（1-5）</label>
                 <input type="number" id="turns" value="3" min="1" max="5">
-                <p class="hint">各ペルソナが発言する回数。多いほど深い議論になります</p>
+                <p class="hint">各キャラクターが発言する回数。多いほど深い議論になります</p>
             </div>
 
                 <div class="button-group">
-                    <button id="generateBtn" class="btn-primary">🚀 会議を開始</button>
+                    <button id="generateBtn" type="button" class="btn-primary">🚀 会議を開始</button>
                 </div>
 
             <div id="loading" class="loading">
                 <div class="spinner"></div>
-                <p>AIペルソナが議論中...</p>
+                <p>AIキャラクターが議論中...</p>
             </div>
         </div>
 
@@ -485,13 +485,8 @@
             }
         });
 
-        // Enterキーでの送信を防止（Shift+Enterで改行）
-        themeInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                generateBtn.click();
-            }
-        });
+        // 日本語IMEの確定Enterで誤送信しないよう、キー操作では送信しない
+        // 送信は明示的なボタン押下のみ
     </script>
 </body>
 </html>
