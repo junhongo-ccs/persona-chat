@@ -47,10 +47,16 @@ async function callGeminiAPI(messages, systemPrompt) {
 
   try {
     // ユーザー入力部分をまとめる（本アプリでは常に user からの単一メッセージ想定）
-    const userText = messages.map(m => m.content).join('\n\n');
+    const userMessages = messages.map(m => m.content).join('\n\n');
+    
+    // v1 API では system_instruction がサポートされていないため、
+    // systemPrompt をユーザーテキストに埋め込む
+    const userText = systemPrompt 
+      ? `${systemPrompt}\n\n---\n\n${userMessages}`
+      : userMessages;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
-  const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
+    const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -64,9 +70,6 @@ async function callGeminiAPI(messages, systemPrompt) {
             parts: [{ text: userText }]
           }
         ],
-        system_instruction: systemPrompt
-          ? { role: 'system', parts: [{ text: systemPrompt }] }
-          : undefined,
         generationConfig: {
           temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0.2'),
           maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || '512')
