@@ -52,7 +52,7 @@ cp .env.example .env
 
 ```
 GOOGLE_API_KEY=your_google_api_key_here
-GEMINI_MODEL=models/text-bison-001 # 任意: 使用するモデル名
+GEMINI_MODEL=gemini-1.5-flash # 任意: 使用するモデル名
 PORT=3000
 ```
 
@@ -89,7 +89,7 @@ git push -u origin main
 4. リポジトリを選択
 5. 環境変数を設定：
    - `GOOGLE_API_KEY`: Google Cloud の API キー（Vertex AI へのアクセス）
-   - `GEMINI_MODEL` (任意): 使用するモデル名（例: `models/text-bison-001`）
+   - `GEMINI_MODEL` (任意): 使用するモデル名（例: `gemini-1.5-flash`）
 6. 「Deploy」をクリック
 
 Railway が自動的に：
