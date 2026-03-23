@@ -5,6 +5,11 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const MIN_THEME_LENGTH = 3;
+const MAX_THEME_LENGTH = 300;
+const MAX_HISTORY_MESSAGES = 8;
+const MAX_HISTORY_CHARS = 2400;
+const GEMINI_TIMEOUT_MS = 30000;
 
 app.use(cors());
 app.use(express.json());
@@ -34,6 +39,65 @@ const PERSONAS = {
   }
 };
 
+function getEnvNumber(name, defaultValue, options = {}) {
+  const rawValue = process.env[name];
+  if (rawValue == null || rawValue === '') {
+    return defaultValue;
+  }
+
+  const parsedValue = options.integer ? parseInt(rawValue, 10) : parseFloat(rawValue);
+  if (!Number.isFinite(parsedValue)) {
+    console.warn(`Invalid ${name} value "${rawValue}". Falling back to ${defaultValue}.`);
+    return defaultValue;
+  }
+
+  if (typeof options.min === 'number' && parsedValue < options.min) {
+    console.warn(`${name} value ${parsedValue} is below minimum ${options.min}. Falling back to ${defaultValue}.`);
+    return defaultValue;
+  }
+
+  if (typeof options.max === 'number' && parsedValue > options.max) {
+    console.warn(`${name} value ${parsedValue} exceeds maximum ${options.max}. Falling back to ${defaultValue}.`);
+    return defaultValue;
+  }
+
+  return parsedValue;
+}
+
+function validateTheme(theme) {
+  if (typeof theme !== 'string' || theme.trim().length < MIN_THEME_LENGTH) {
+    return `テーマを${MIN_THEME_LENGTH}文字以上で入力してください`;
+  }
+
+  if (theme.trim().length > MAX_THEME_LENGTH) {
+    return `テーマは${MAX_THEME_LENGTH}文字以内で入力してください`;
+  }
+
+  return null;
+}
+
+function validateTurns(turns) {
+  const parsedTurns = parseInt(String(turns), 10);
+  if (!Number.isFinite(parsedTurns)) {
+    return { error: 'ターン数は1-5の数値で指定してください' };
+  }
+
+  return { value: Math.min(Math.max(1, parsedTurns), 5) };
+}
+
+function buildHistoryText(conversation) {
+  const recentMessages = conversation.slice(-MAX_HISTORY_MESSAGES);
+  const historyText = recentMessages
+    .map(c => `${c.name}: ${c.message}`)
+    .join('\n\n');
+
+  if (historyText.length <= MAX_HISTORY_CHARS) {
+    return historyText;
+  }
+
+  return historyText.slice(historyText.length - MAX_HISTORY_CHARS);
+}
+
 // Gemini (Generative Language API) に置き換えた API 呼び出し関数
 // 環境変数 `GOOGLE_API_KEY` に設定した API キーを使用し、
 // Generative Language API (v1) の generateContent を呼び出します。
@@ -55,25 +119,33 @@ async function callGeminiAPI(messages, systemPrompt) {
 
       const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
       const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: userText }]
+      let response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: userText }]
+              }
+            ],
+            generationConfig: {
+              temperature: getEnvNumber('GEMINI_TEMPERATURE', 0.2, { min: 0, max: 2 }),
+              maxOutputTokens: getEnvNumber('GEMINI_MAX_TOKENS', 512, { integer: true, min: 1, max: 8192 })
             }
-          ],
-          generationConfig: {
-            temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0.2'),
-            maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || '512')
-          }
-        })
-      });
+          })
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (response.status === 429) {
         // レート制限: Retry-Afterヘッダーまたは8秒待機
@@ -96,17 +168,26 @@ async function callGeminiAPI(messages, systemPrompt) {
       const candidate = data.candidates && data.candidates[0];
       const parts = candidate && candidate.content && candidate.content.parts;
       if (Array.isArray(parts)) {
-        return parts
+        const text = parts
           .map(p => (typeof p.text === 'string' ? p.text : ''))
           .join('\n')
           .trim();
+        if (text) {
+          return text;
+        }
       }
       // フォールバック
       if (candidate && typeof candidate.output_text === 'string') {
-        return candidate.output_text;
+        const outputText = candidate.output_text.trim();
+        if (outputText) {
+          return outputText;
+        }
       }
-      return JSON.stringify(data);
+      throw new Error('Gemini API returned no text content');
     } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Gemini API request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+      }
       // 429以外は即エラー
       if (!(error.message && error.message.includes('429'))) {
         console.error('Gemini API Error:', error);
@@ -125,9 +206,10 @@ async function callGeminiAPI(messages, systemPrompt) {
 app.post('/api/refine-theme', async (req, res) => {
   try {
     const { theme } = req.body;
+    const themeError = validateTheme(theme);
 
-    if (!theme || theme.trim().length < 3) {
-      return res.status(400).json({ error: 'テーマを入力してください' });
+    if (themeError) {
+      return res.status(400).json({ error: themeError });
     }
 
     const messages = [{
@@ -154,14 +236,19 @@ app.post('/api/refine-theme', async (req, res) => {
 app.post('/api/generate-conversation', async (req, res) => {
   try {
     const { theme, turns = 3 } = req.body;
+    const themeError = validateTheme(theme);
+    const turnsResult = validateTurns(turns);
 
-    if (!theme || theme.trim().length < 3) {
-      return res.status(400).json({ error: 'テーマを入力してください' });
+    if (themeError) {
+      return res.status(400).json({ error: themeError });
     }
 
-    const maxTurns = Math.min(Math.max(1, parseInt(turns)), 5); // 1-5ターンに制限
+    if (turnsResult.error) {
+      return res.status(400).json({ error: turnsResult.error });
+    }
+
+    const maxTurns = turnsResult.value; // 1-5ターンに制限
     const conversation = [];
-    const conversationHistory = [];
 
     // ファシリテーターが開始
     const openingMessage = {
@@ -181,11 +268,6 @@ app.post('/api/generate-conversation', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    conversationHistory.push({
-      role: 'user',
-      content: `テーマ: ${theme}\n\nファシリテーター: ${facilitatorOpening}`
-    });
-
     // 各ターンで3人が発言
     const speakingOrder = ['optimist', 'realist', 'customer'];
 
@@ -194,9 +276,7 @@ app.post('/api/generate-conversation', async (req, res) => {
         const persona = PERSONAS[personaKey];
         
         // これまでの会話履歴を含めてプロンプトを作成
-        const historyText = conversation
-          .map(c => `${c.name}: ${c.message}`)
-          .join('\n\n');
+        const historyText = buildHistoryText(conversation);
 
         const messages = [{
           role: 'user',
@@ -220,9 +300,7 @@ ${historyText}
 
       // ターンの終わりにファシリテーターがまとめ（最終ターン以外）
       if (turn < maxTurns - 1) {
-        const historyText = conversation
-          .map(c => `${c.name}: ${c.message}`)
-          .join('\n\n');
+        const historyText = buildHistoryText(conversation);
 
         const messages = [{
           role: 'user',
@@ -249,9 +327,7 @@ ${historyText}
     }
 
     // 最終まとめ
-    const historyText = conversation
-      .map(c => `${c.name}: ${c.message}`)
-      .join('\n\n');
+    const historyText = buildHistoryText(conversation);
 
     const messages = [{
       role: 'user',
