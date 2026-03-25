@@ -44,10 +44,13 @@ Railway のプロジェクト画面で：
 2. 以下の環境変数を追加：
 
 ```
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
+GOOGLE_API_KEY=your_google_api_key_here
+GEMINI_MODEL=gemini-2.0-flash
+GEMINI_TEMPERATURE=0.2
+GEMINI_MAX_TOKENS=512
 ```
 
-（Anthropic API キーは https://console.anthropic.com/ から取得）
+（Gemini API キーは https://aistudio.google.com/app/apikey から取得）
 
 ### ステップ4: デプロイを確認
 
@@ -60,12 +63,12 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
 ### デプロイが失敗する場合
 
 1. ログを確認：Railway の「Deployments」タブでログを確認
-2. 環境変数を確認：`ANTHROPIC_API_KEY` が正しく設定されているか確認
+2. 環境変数を確認：`GOOGLE_API_KEY` が正しく設定されているか確認
 3. package.json を確認：依存関係が正しいか確認
 
 ### アプリが起動しない場合
 
-- Railway のログで「ANTHROPIC_API_KEY is not set」エラーが出ている場合
+- Railway のログで「GOOGLE_API_KEY is not set」エラーが出ている場合
   → 環境変数を設定してください
 
 - ポートエラーが出る場合
@@ -92,6 +95,6 @@ npm start
 ## 費用について
 
 - **Railway**: 無料枠あり（月500時間まで）、超過後は従量課金
-- **Anthropic API**: 使用量に応じた課金（トークン数ベース）
+- **Gemini API**: 使用量に応じた課金（トークン数ベース）
 
 複数ユーザーでの使用を想定する場合は、両方の料金体系を確認してください。
