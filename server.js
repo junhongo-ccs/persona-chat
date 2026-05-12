@@ -28,17 +28,17 @@ const PERSONAS = {
   optimist: {
     name: "楽観的マーケター",
     role: "市場機会や可能性に焦点を当て、前向きな視点を提供",
-    systemPrompt: "あなたは楽観的なマーケティング担当者です。前向きな提案を1つに絞って、会話らしく簡潔に述べてください。発言は自然文2〜3文で、最後に実行案を1文で示してください。既出アイデアの言い換えは禁止です。文体は必ずです・ます調。Markdown記法とアスタリスク記号は禁止です。"
+    systemPrompt: "あなたは楽観的なマーケティング担当者です。前向きな提案を1つに絞って、会話らしく簡潔に述べてください。発言は自然文2〜3文で、実務で試せる提案を含めてください。既出アイデアの言い換えは禁止です。文体は必ずです・ます調。Markdown記法とアスタリスク記号は禁止です。"
   },
   realist: {
     name: "慎重なエンジニア",
     role: "技術的実現可能性やリスクを冷静に分析",
-    systemPrompt: "あなたは慎重なエンジニアリング担当者です。懸念は1点だけに絞り、代替案も必ず1つ示してください。発言は自然文2〜3文で、最後に検証アクションを1文で示してください。既出懸念の重複は禁止です。文体は必ずです・ます調。Markdown記法とアスタリスク記号は禁止です。"
+    systemPrompt: "あなたは慎重なエンジニアリング担当者です。懸念は1点だけに絞り、代替案を示してください。発言は自然文2〜3文で、技術的な確認観点を含めてください。既出懸念の重複は禁止です。文体は必ずです・ます調。Markdown記法とアスタリスク記号は禁止です。"
   },
   customer: {
     name: "ユーザー代表",
     role: "エンドユーザーの視点から実用性や使いやすさを重視",
-    systemPrompt: "あなたは実際のエンドユーザー代表です。利用場面を1つ挙げて、受け入れ条件を明確にしてください。発言は自然文2〜3文で、最後にユーザーテスト観点を1文で示してください。専門用語は避けてください。文体は必ずです・ます調。Markdown記法とアスタリスク記号は禁止です。"
+    systemPrompt: "あなたは実際のエンドユーザー代表です。利用場面を1つ挙げて、使い手としての判断基準を示してください。発言は自然文2〜3文で、ユーザーテスト観点を含めてください。専門用語は避けてください。文体は必ずです・ます調。Markdown記法とアスタリスク記号は禁止です。"
   }
 };
 
@@ -93,6 +93,17 @@ function sanitizeRegularMessage(text, speakerName) {
   const cleaned = sanitizeMessage(text, speakerName);
   const deduped = dedupeParagraphs(cleaned);
   return truncateMessage(deduped, REGULAR_MESSAGE_MAX_CHARS);
+}
+
+function sanitizeResearchMessage(text, speakerName) {
+  const cleaned = sanitizeMessage(text, speakerName);
+  const deduped = dedupeParagraphs(cleaned);
+  return truncateMessage(deduped, 1200);
+}
+
+function normalizeFeatureTermsInText(text) {
+  if (typeof text !== 'string') return text;
+  return text;
 }
 
 function formatFinalSummary(text) {
@@ -330,6 +341,10 @@ function extractFeatureTerms(theme) {
   const terms = new Set();
   const dotMatches = theme.match(/\b[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g) || [];
   for (const t of dotMatches) terms.add(t);
+  const technicalWords = theme.match(/\b[A-Za-z][A-Za-z0-9._/-]{2,}\b/g) || [];
+  for (const t of technicalWords) {
+    if (t.length <= 40) terms.add(t);
+  }
   const quoted = theme.match(/["「『](.+?)["」』]/g) || [];
   for (const q of quoted) {
     const cleaned = q.replace(/^["「『]|["」』]$/g, '').trim();
@@ -380,6 +395,64 @@ async function lookupTermOnWeb(term) {
   }
 }
 
+async function lookupTermCandidatesOnWeb(term) {
+  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(term)}&format=json&no_html=1&skip_disambig=0`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    const candidates = [];
+    const pushCandidate = (text, source) => {
+      const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!cleaned) return;
+      if (candidates.some(c => c.text === cleaned)) return;
+      candidates.push({ text: cleaned.slice(0, 180), source });
+    };
+
+    pushCandidate(json.AbstractText, 'duckduckgo:abstract');
+    pushCandidate(json.Definition, 'duckduckgo:definition');
+
+    const related = Array.isArray(json.RelatedTopics) ? json.RelatedTopics : [];
+    for (const item of related) {
+      if (item && typeof item.Text === 'string') {
+        pushCandidate(item.Text, 'duckduckgo:related');
+      }
+      if (item && Array.isArray(item.Topics)) {
+        for (const nested of item.Topics) {
+          if (nested && typeof nested.Text === 'string') {
+            pushCandidate(nested.Text, 'duckduckgo:related');
+          }
+        }
+      }
+      if (candidates.length >= 5) break;
+    }
+    return candidates.slice(0, 5);
+  } catch (_) {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function translateCandidateToJapanese(text) {
+  if (!text || typeof text !== 'string') return '';
+  const input = text.trim();
+  if (!input) return '';
+  if (/[ぁ-んァ-ヶ一-龠]/.test(input)) return input;
+
+  try {
+    const translated = await callGeminiAPI(
+      [{ role: 'user', content: `次の文を自然な日本語に短く翻訳してください。説明は不要です。\n\n${input}` }],
+      'あなたは翻訳者です。意味を変えず、簡潔な日本語に翻訳してください。'
+    );
+    return String(translated || '').trim() || input;
+  } catch (_) {
+    return input;
+  }
+}
+
 async function buildFeatureContext(theme) {
   const terms = extractFeatureTerms(theme);
   if (!terms.length) return '';
@@ -395,7 +468,116 @@ async function buildFeatureContext(theme) {
       lines.push(`- ${term}: 参考情報なし。意味を決め打ちせず、原語のまま扱うこと。`);
     }
   }
-  lines.push('ルール: 重要語は別語へ言い換え禁止。意味が曖昧な場合は、仮定を1文で明示してから議論すること。');
+  lines.push('ルール: 重要語は別語へ言い換え禁止。重要語が design.md の場合は、必ず "design.md" と表記すること。');
+  lines.push('ルール: 未知語は一般概念へ丸めず、まず語そのものを保持して扱うこと。');
+  return lines.join('\n');
+}
+
+function extractUnknownCandidates(theme) {
+  if (typeof theme !== 'string') return [];
+  const terms = new Set(extractFeatureTerms(theme));
+  const stopWords = new Set([
+    'モデル',
+    'データ',
+    'システム',
+    'プロジェクト',
+    'サービス',
+    'アプリ',
+    'ツール',
+    'ユーザー',
+    'テーマ',
+    '会議',
+    '導入',
+    '運用',
+    '管理',
+    '方針',
+    '活用',
+    '統合',
+    '検討',
+    '改善',
+    '分析',
+    '設計'
+  ]);
+  const katakanaTokens = theme.match(/[ァ-ヴー]{4,}/g) || [];
+  const genericKatakanaPattern = /(モデル|データ|システム|サービス|プロジェクト|アプリ|ツール|テーマ|会議|導入|運用|管理|方針|活用|統合|検討|改善|分析|設計)/;
+  for (const k of katakanaTokens) {
+    if (k.length <= 20 && !stopWords.has(k) && !genericKatakanaPattern.test(k)) {
+      terms.add(k);
+    }
+  }
+
+  const filtered = [];
+  for (const term of terms) {
+    const cleaned = String(term || '').trim();
+    if (!cleaned) continue;
+    if (stopWords.has(cleaned)) continue;
+    filtered.push(cleaned);
+  }
+  return filtered.slice(0, 8);
+}
+
+async function buildResearchBriefing(theme, resolvedTerms = {}) {
+  const candidates = extractUnknownCandidates(theme);
+  if (!candidates.length) {
+    return '事前調査メモ:\n- 明確な未知語は見つかりませんでした。テーマ文の原語をそのまま使って議論してください。';
+  }
+
+  const lines = ['事前調査メモ（会議前共有・ネット検索のみ）:'];
+  for (const term of candidates) {
+    const fixed = resolvedTerms && typeof resolvedTerms[term] === 'string' ? resolvedTerms[term].trim() : '';
+    if (fixed) {
+      lines.push(`- 用語: ${term}`);
+      lines.push(`  定義候補: ${fixed}`);
+      lines.push('  出典: ユーザー確定');
+      continue;
+    }
+    const web = await lookupTermOnWeb(term);
+    if (web) {
+      lines.push(`- 用語: ${term}`);
+      lines.push(`  定義候補: ${web.snippet}`);
+      lines.push(`  出典: ${web.source}`);
+    } else {
+      lines.push(`- 用語: ${term}`);
+      lines.push('  定義候補: 未取得（憶測で意味を拡張しない）');
+      lines.push('  出典: なし');
+    }
+  }
+  lines.push('運用ルール: このメモにない意味を勝手に作らない。曖昧な用語は曖昧なまま扱い、断定しない。');
+  return lines.join('\n');
+}
+
+async function buildDisambiguationCandidates(theme) {
+  const terms = extractUnknownCandidates(theme);
+  const result = [];
+  for (const term of terms) {
+    const candidates = await lookupTermCandidatesOnWeb(term);
+    result.push({ term, candidates });
+  }
+  return result;
+}
+
+function validateResolvedTerms(theme, resolvedTerms) {
+  const terms = extractUnknownCandidates(theme);
+  if (!terms.length) return null;
+  if (!resolvedTerms || typeof resolvedTerms !== 'object') {
+    return terms;
+  }
+  const missing = terms.filter((term) => {
+    const v = resolvedTerms[term];
+    return typeof v !== 'string' || v.trim().length < 2;
+  });
+  return missing.length ? missing : null;
+}
+
+function buildResolvedTermsContext(resolvedTerms) {
+  if (!resolvedTerms || typeof resolvedTerms !== 'object') return '';
+  const entries = Object.entries(resolvedTerms).filter(([, v]) => typeof v === 'string' && v.trim());
+  if (!entries.length) return '';
+  const lines = ['意味確定済み用語（会議前にユーザー確認済み）:'];
+  for (const [term, meaning] of entries) {
+    lines.push(`- ${term}: ${meaning.trim()}`);
+  }
+  lines.push('ルール: 下記定義から逸脱しない。未定義の意味は断定しない。');
   return lines.join('\n');
 }
 
@@ -541,10 +723,31 @@ app.post('/api/refine-theme', async (req, res) => {
   }
 });
 
+app.post('/api/disambiguate-terms', async (req, res) => {
+  try {
+    const { theme } = req.body;
+    const themeError = validateTheme(theme);
+    if (themeError) {
+      return res.status(400).json({ error: themeError });
+    }
+    const terms = await buildDisambiguationCandidates(theme);
+    for (const termItem of terms) {
+      const candidates = Array.isArray(termItem.candidates) ? termItem.candidates : [];
+      for (const c of candidates) {
+        c.textJa = await translateCandidateToJapanese(c.text);
+      }
+    }
+    res.json({ terms });
+  } catch (error) {
+    console.error('Error disambiguating terms:', error);
+    res.status(500).json({ error: '用語候補の取得に失敗しました', detail: String(error && error.message || error) });
+  }
+});
+
 // 会話を生成するエンドポイント
 app.post('/api/generate-conversation', async (req, res) => {
   try {
-    const { theme, turns = 3 } = req.body;
+    const { theme, turns = 3, resolvedTerms = {} } = req.body;
     const themeError = validateTheme(theme);
     const turnsResult = validateTurns(turns);
 
@@ -555,10 +758,29 @@ app.post('/api/generate-conversation', async (req, res) => {
     if (turnsResult.error) {
       return res.status(400).json({ error: turnsResult.error });
     }
+    const missingTerms = validateResolvedTerms(theme, resolvedTerms);
+    if (missingTerms) {
+      return res.status(400).json({
+        error: '曖昧語の意味確定が必要です',
+        detail: `次の用語の意味を確定してください: ${missingTerms.join(', ')}`
+      });
+    }
 
     const maxTurns = turnsResult.value; // 1-5ターンに制限
     const conversation = [];
     const featureContext = await buildFeatureContext(theme);
+    const researchBriefing = await buildResearchBriefing(theme, resolvedTerms);
+    const resolvedTermsContext = buildResolvedTermsContext(resolvedTerms);
+
+    conversation.push({
+      persona: 'facilitator',
+      name: 'ファシリテーター（進行役・事前調査）',
+      message: sanitizeResearchMessage(
+        `${researchBriefing}\n\nこの調査メモを共通前提として、ここから議論を開始します。`,
+        'ファシリテーター（進行役・事前調査）'
+      ),
+      timestamp: new Date().toISOString()
+    });
 
     // ファシリテーターが開始
     const openingMessage = {
@@ -566,6 +788,11 @@ app.post('/api/generate-conversation', async (req, res) => {
       content: `これから「${theme}」というテーマについて議論を始めます。参加者は楽観的マーケター、慎重なエンジニア、ユーザー代表の3名です。
 最初に、議論の目的と最初の確認事項だけを自然な会話文で短く提示してください。
 あいさつ文（例: 皆さん、本日は〜）や前置きは不要です。
+事前調査メモに出てきた用語定義を踏まえて発言してください。
+
+${researchBriefing}
+
+${resolvedTermsContext}
 
 ${featureContext}`
     };
@@ -578,7 +805,10 @@ ${featureContext}`
     conversation.push({
       persona: 'facilitator',
       name: PERSONAS.facilitator.name,
-      message: sanitizeRegularMessage(facilitatorOpening, PERSONAS.facilitator.name),
+      message: sanitizeRegularMessage(
+        normalizeFeatureTermsInText(facilitatorOpening, theme),
+        PERSONAS.facilitator.name
+      ),
       timestamp: new Date().toISOString()
     });
 
@@ -602,6 +832,11 @@ ${historyText}
 あなた（${persona.name}）の番です。上記の議論を踏まえて、あなたの視点で短く述べてください。
 重要: 既出内容の言い換えは避け、今回初出の具体情報を1つだけ追加してください。長く書きすぎないでください。
 重要語の定義を勝手に変更しないでください。特に .md はファイルとして扱ってください。
+会議前の調査メモにない意味を追加で断定しないでください。
+
+${researchBriefing}
+
+${resolvedTermsContext}
 
 ${featureContext}`
         }];
@@ -611,7 +846,10 @@ ${featureContext}`
         conversation.push({
           persona: personaKey,
           name: persona.name,
-          message: sanitizeRegularMessage(response, persona.name),
+          message: sanitizeRegularMessage(
+            normalizeFeatureTermsInText(response, theme),
+            persona.name
+          ),
           timestamp: new Date().toISOString()
         });
       }
@@ -628,6 +866,11 @@ ${featureContext}`
 ${historyText}
 
 ファシリテーターとして、ここまでの議論を2〜3文で整理し、次のターンで決めるべき1点を1文で示してください。
+調査メモで未確定の用語があれば、未確定のまま扱ってください。
+
+${researchBriefing}
+
+${resolvedTermsContext}
 
 ${featureContext}`
         }];
@@ -640,7 +883,10 @@ ${featureContext}`
         conversation.push({
           persona: 'facilitator',
           name: PERSONAS.facilitator.name,
-          message: sanitizeRegularMessage(facilitatorSummary, PERSONAS.facilitator.name),
+          message: sanitizeRegularMessage(
+            normalizeFeatureTermsInText(facilitatorSummary, theme),
+            PERSONAS.facilitator.name
+          ),
           timestamp: new Date().toISOString()
         });
       }
@@ -663,6 +909,7 @@ ${historyText}
 総括部分はMarkdownライクな読み物として整形してください（見出しと箇条書きを使用）。
 話者名（例: ファシリテーター: / 楽観的マーケター:）で始まる会話文を再掲しないでください。
 全体で簡潔に、長くても900文字程度に収めてください。
+調査メモにない定義を断定しないでください。
 
 総括
 （ここに2〜3文の要約）
@@ -670,6 +917,10 @@ ${historyText}
 今後の検討ポイント
 - （ポイント1）
 - （ポイント2）
+
+${researchBriefing}
+
+${resolvedTermsContext}
 
 ${featureContext}`
     }];
@@ -682,7 +933,12 @@ ${featureContext}`
     conversation.push({
       persona: 'facilitator',
       name: PERSONAS.facilitator.name + '（総括）',
-      message: formatFinalSummary(sanitizeMessage(finalSummary, PERSONAS.facilitator.name)),
+      message: formatFinalSummary(
+        sanitizeMessage(
+          normalizeFeatureTermsInText(finalSummary, theme),
+          PERSONAS.facilitator.name
+        )
+      ),
       timestamp: new Date().toISOString()
     });
 

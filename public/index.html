@@ -252,6 +252,74 @@
         .toast.success { border-left-color: var(--block-mint); }
         .toast.error { border-left-color: var(--block-coral); }
         .toast.fade-out { opacity: 0; transform: translateY(-8px); transition: opacity 0.2s ease, transform 0.2s ease; }
+        .term-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.36);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-2);
+            z-index: 10000;
+        }
+        .term-modal-backdrop.active { display: flex; }
+        .term-modal {
+            width: min(760px, 100%);
+            background: var(--canvas);
+            border: 1px solid var(--hairline);
+            border-radius: 16px;
+            padding: var(--space-3);
+        }
+        .term-modal-title {
+            font-size: var(--type-h4-size);
+            font-weight: var(--type-h4-weight);
+            line-height: var(--type-h4-lh);
+            letter-spacing: var(--type-h4-ls);
+            margin-bottom: var(--space-1);
+        }
+        .term-modal-desc {
+            color: var(--text-secondary);
+            font-size: var(--type-body-sm-size);
+            margin-bottom: var(--space-2);
+        }
+        .term-term-name {
+            font-size: var(--type-h5-size);
+            font-weight: var(--type-h5-weight);
+            margin-bottom: var(--space-1);
+        }
+        .term-candidate-list {
+            display: grid;
+            gap: var(--space-1);
+            margin-bottom: var(--space-2);
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .term-candidate-item {
+            border: 1px solid var(--hairline);
+            border-radius: 12px;
+            padding: var(--space-1) var(--space-2);
+            background: var(--surface-soft);
+        }
+        .term-candidate-item input { margin-right: 8px; }
+        .term-candidate-item label {
+            font-size: var(--type-body-sm-size);
+            color: var(--text-primary);
+            line-height: var(--type-body-sm-lh);
+        }
+        .term-custom-input {
+            width: 100%;
+            border: 1px solid var(--hairline);
+            border-radius: 12px;
+            padding: var(--space-1) var(--space-2);
+            font-size: var(--type-body-size);
+            background: var(--canvas);
+        }
+        .term-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--space-1);
+            margin-top: var(--space-2);
+        }
         @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         .mt-1 { margin-top: var(--space-1); }
         .mb-3 { margin-bottom: var(--space-3); }
@@ -270,6 +338,17 @@
 </head>
 <body>
     <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <div id="termModalBackdrop" class="term-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="termModalTitle">
+        <div class="term-modal">
+            <h2 id="termModalTitle" class="term-modal-title">用語の意味を確定</h2>
+            <p class="term-modal-desc">曖昧語の意味を選択または入力してください。未確定のまま会議は開始できません。</p>
+            <div id="termModalBody"></div>
+            <div class="term-modal-actions">
+                <button id="termModalCancelBtn" class="btn-secondary">キャンセル</button>
+                <button id="termModalConfirmBtn" class="btn-primary">確定して次へ</button>
+            </div>
+        </div>
+    </div>
     <div class="container">
         <div class="header">
             <h1>🎭 マルチキャラクター会議シミュレーター</h1>

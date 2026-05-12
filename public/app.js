@@ -8,6 +8,10 @@ const conversation = document.getElementById('conversation');
 const messages = document.getElementById('messages');
 const refinedThemeBox = document.getElementById('refinedThemeBox');
 const toastContainer = document.getElementById('toastContainer');
+const termModalBackdrop = document.getElementById('termModalBackdrop');
+const termModalBody = document.getElementById('termModalBody');
+const termModalCancelBtn = document.getElementById('termModalCancelBtn');
+const termModalConfirmBtn = document.getElementById('termModalConfirmBtn');
 
 let currentRefinedTheme = null;
 
@@ -106,6 +110,109 @@ async function parseApiResponse(response) {
     }
 }
 
+async function resolveTermMeanings(theme) {
+    const response = await fetch('/api/disambiguate-terms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme })
+    });
+    const { data, rawText } = await parseApiResponse(response);
+    if (!response.ok) {
+        const fallbackData = data || { detail: rawText || 'Unknown error' };
+        throw new Error(buildApiErrorMessage('用語候補の取得に失敗しました。', fallbackData));
+    }
+
+    const terms = Array.isArray(data && data.terms) ? data.terms : [];
+    const resolvedTerms = {};
+
+    for (const item of terms) {
+        const term = item && item.term ? String(item.term) : '';
+        if (!term) continue;
+        const candidates = Array.isArray(item.candidates) ? item.candidates : [];
+        resolvedTerms[term] = await openTermModalAndResolve(term, candidates);
+    }
+
+    return resolvedTerms;
+}
+
+function openTermModalAndResolve(term, candidates) {
+    return new Promise((resolve, reject) => {
+        if (!termModalBackdrop || !termModalBody || !termModalCancelBtn || !termModalConfirmBtn) {
+            reject(new Error('意味確定モーダルの初期化に失敗しました。'));
+            return;
+        }
+
+        termModalBody.innerHTML = '';
+
+        const termName = document.createElement('div');
+        termName.className = 'term-term-name';
+        termName.textContent = `用語: ${term}`;
+        termModalBody.appendChild(termName);
+
+        const list = document.createElement('div');
+        list.className = 'term-candidate-list';
+
+        candidates.forEach((candidate, idx) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'term-candidate-item';
+
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'termCandidate';
+            input.id = `termCandidate${idx}`;
+            input.value = candidate.textJa || candidate.text || '';
+            if (idx === 0) input.checked = true;
+
+            const label = document.createElement('label');
+            label.setAttribute('for', input.id);
+            label.textContent = candidate.textJa || candidate.text || '候補なし';
+
+            wrapper.appendChild(input);
+            wrapper.appendChild(label);
+            list.appendChild(wrapper);
+        });
+        termModalBody.appendChild(list);
+
+        const custom = document.createElement('input');
+        custom.type = 'text';
+        custom.className = 'term-custom-input';
+        custom.placeholder = '候補にない場合はここに意味を直接入力';
+        termModalBody.appendChild(custom);
+
+        termModalBackdrop.classList.add('active');
+        custom.focus();
+
+        const cleanup = () => {
+            termModalBackdrop.classList.remove('active');
+            termModalCancelBtn.onclick = null;
+            termModalConfirmBtn.onclick = null;
+        };
+
+        termModalCancelBtn.onclick = () => {
+            cleanup();
+            reject(new Error('意味確定がキャンセルされたため、会議開始を停止しました。'));
+        };
+
+        termModalConfirmBtn.onclick = () => {
+            const customText = custom.value.trim();
+            if (customText) {
+                cleanup();
+                resolve(customText);
+                return;
+            }
+
+            const selected = termModalBody.querySelector('input[name="termCandidate"]:checked');
+            const selectedText = selected ? String(selected.value || '').trim() : '';
+            if (!selectedText) {
+                showToast(`用語「${term}」の意味を入力または選択してください。`, 'error');
+                return;
+            }
+            cleanup();
+            resolve(selectedText);
+        };
+    });
+}
+
 // テーマを具体化
 refineBtn.addEventListener('click', async () => {
     const theme = themeInput.value.trim();
@@ -166,6 +273,14 @@ generateBtn.addEventListener('click', async () => {
         return;
     }
 
+    let resolvedTerms = {};
+    try {
+        resolvedTerms = await resolveTermMeanings(theme);
+    } catch (error) {
+        showToast(String(error.message || error), 'error', 5000);
+        return;
+    }
+
     // UI更新
     generateBtn.disabled = true;
     refineBtn.disabled = true;
@@ -180,7 +295,7 @@ generateBtn.addEventListener('click', async () => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ theme, turns })
+            body: JSON.stringify({ theme, turns, resolvedTerms })
         });
 
         const { data, rawText } = await parseApiResponse(response);
