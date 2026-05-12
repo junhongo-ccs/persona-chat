@@ -87,6 +87,25 @@ function buildApiErrorMessage(prefix, data) {
     return prefix;
 }
 
+async function parseApiResponse(response) {
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
+    const rawText = await response.text();
+
+    if (contentType.includes('application/json')) {
+        try {
+            return { data: JSON.parse(rawText), rawText };
+        } catch (_) {
+            return { data: null, rawText };
+        }
+    }
+
+    try {
+        return { data: JSON.parse(rawText), rawText };
+    } catch (_) {
+        return { data: null, rawText };
+    }
+}
+
 // テーマを具体化
 refineBtn.addEventListener('click', async () => {
     const theme = themeInput.value.trim();
@@ -108,9 +127,13 @@ refineBtn.addEventListener('click', async () => {
             body: JSON.stringify({ theme })
         });
 
-        let data = await response.json();
+        const { data, rawText } = await parseApiResponse(response);
         if (!response.ok) {
-            throw new Error(buildApiErrorMessage('テーマの具体化に失敗しました。', data));
+            const fallbackData = data || { detail: rawText || 'Unknown error' };
+            throw new Error(buildApiErrorMessage('テーマの具体化に失敗しました。', fallbackData));
+        }
+        if (!data || !data.refinedTheme) {
+            throw new Error('テーマの具体化レスポンスが不正です。');
         }
         currentRefinedTheme = data.refinedTheme;
         
@@ -160,9 +183,13 @@ generateBtn.addEventListener('click', async () => {
             body: JSON.stringify({ theme, turns })
         });
 
-        let data = await response.json();
+        const { data, rawText } = await parseApiResponse(response);
         if (!response.ok) {
-            throw new Error(buildApiErrorMessage('会話の生成に失敗しました。', data));
+            const fallbackData = data || { detail: rawText || 'Unknown error' };
+            throw new Error(buildApiErrorMessage('会話の生成に失敗しました。', fallbackData));
+        }
+        if (!data || !Array.isArray(data.conversation)) {
+            throw new Error('会話生成レスポンスが不正です。');
         }
 
         // 会話を表示（XSS対策のため textContent を使用）
