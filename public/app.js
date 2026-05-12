@@ -173,11 +173,22 @@ function openTermModalAndResolve(term, candidates) {
         });
         termModalBody.appendChild(list);
 
-        const custom = document.createElement('input');
-        custom.type = 'text';
+        const custom = document.createElement('textarea');
         custom.className = 'term-custom-input';
-        custom.placeholder = '候補にない場合はここに意味を直接入力';
+        custom.placeholder = '候補にない場合はここに意味を直接入力（複数行可）';
+        custom.rows = 4;
         termModalBody.appendChild(custom);
+
+        const customHint = document.createElement('div');
+        customHint.className = 'term-custom-hint';
+        customHint.textContent = '定義は具体的に書くほど議論がぶれにくくなります（目安: 20〜300文字）';
+        termModalBody.appendChild(customHint);
+
+        const updateHint = () => {
+            const count = custom.value.trim().length;
+            customHint.textContent = `定義は具体的に書くほど議論がぶれにくくなります（現在 ${count} 文字 / 目安 20〜300文字）`;
+        };
+        custom.addEventListener('input', updateHint);
 
         termModalBackdrop.classList.add('active');
         custom.focus();
@@ -196,6 +207,10 @@ function openTermModalAndResolve(term, candidates) {
         termModalConfirmBtn.onclick = () => {
             const customText = custom.value.trim();
             if (customText) {
+                if (customText.length > 800) {
+                    showToast('入力が長すぎます。800文字以内で入力してください。', 'error');
+                    return;
+                }
                 cleanup();
                 resolve(customText);
                 return;
